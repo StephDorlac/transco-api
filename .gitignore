@@ -24,3 +24,10 @@ logs/
 
 # Spring Boot
 spring-shell.log
+
+# Spring configuration (credentials)
+src/main/resources/application.properties
+
+# Node / Vite
+transco-admin/node_modules/
+transco-admin/dist/
