@@ -1,5 +1,19 @@
-spring.datasource.url=jdbc:postgresql://localhost:5432/transco
-spring.datasource.username=CHANGE_ME
-spring.datasource.password=CHANGE_ME
-spring.jpa.hibernate.ddl-auto=none
-spring.jpa.show-sql=false
+spring.application.name=transco-api
+
+# DataSource PostgreSQL
+spring.datasource.url=jdbc:postgresql://localhost:5432/transco_db
+spring.datasource.username=postgres
+spring.datasource.password=*****MOTDEPASSE****
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# JPA / Hibernate
+spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+# Springdoc / Swagger
+springdoc.api-docs.path=/api-docs
+springdoc.swagger-ui.path=/swagger-ui.html
+springdoc.swagger-ui.operationsSorter=alpha
+springdoc.swagger-ui.tagsSorter=alpha
