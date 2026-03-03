@@ -1,9 +1,13 @@
 package com.transco.api.controller.v1;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.transco.api.config.SecurityConfig;
 import com.transco.api.dto.v1.TranscoRuleDtoV1;
 import com.transco.api.exception.GlobalExceptionHandler;
 import com.transco.api.exception.ResourceNotFoundException;
+import com.transco.api.repository.ApiKeyRepository;
+import com.transco.api.security.ApiKeyAuthenticationFilter;
+import com.transco.api.security.ProblemDetailAuthenticationEntryPoint;
 import com.transco.api.service.v1.TranscoRuleServiceV1;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -13,6 +17,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -25,7 +30,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(TranscoRuleControllerV1.class)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, SecurityConfig.class, ApiKeyAuthenticationFilter.class, ProblemDetailAuthenticationEntryPoint.class})
+@WithMockUser
 @DisplayName("TranscoRuleControllerV1 — Tests unitaires")
 class TranscoRuleControllerV1Test {
 
@@ -37,6 +43,9 @@ class TranscoRuleControllerV1Test {
 
     @MockBean
     private TranscoRuleServiceV1 service;
+
+    @MockBean
+    private ApiKeyRepository apiKeyRepository;
 
     private static final String BASE_URL = "/api/v1/transco-rules";
 

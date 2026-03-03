@@ -54,3 +54,12 @@ INSERT INTO transco_rule (context, inputs, output_value, priority) VALUES
 ON CONFLICT DO NOTHING;
 
 ALTER TABLE transco_rule ALTER COLUMN id TYPE BIGINT;
+
+CREATE TABLE IF NOT EXISTS api_key (
+    id          BIGSERIAL    PRIMARY KEY,
+    client_name VARCHAR(100) NOT NULL,
+    key_hash    CHAR(64)     NOT NULL,
+    active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_key_hash ON api_key (key_hash);
