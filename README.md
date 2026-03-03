@@ -4,6 +4,7 @@
 
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3-6DB33F?style=flat-square&logo=springboot&logoColor=white)
+![Spring Security](https://img.shields.io/badge/Spring%20Security-6-6DB33F?style=flat-square&logo=springsecurity&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?style=flat-square&logo=postgresql&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)
 ![License](https://img.shields.io/badge/Licence-MIT-blue?style=flat-square)
@@ -36,6 +37,7 @@ Sans outillage dédié, ces règles finissent enfouies dans du code métier diff
 | Import manuel fastidieux | Import en masse depuis Excel (`.xlsx`) |
 | Pas de traçabilité des règles | Horodatage automatique de chaque règle |
 | Duplication entre projets | Moteur générique réutilisable, multi-contexte |
+| Accès non protégé | Authentification par API Key (SHA-256), révocable par client |
 
 ---
 
@@ -66,11 +68,13 @@ Lors d'une résolution, le moteur :
 ```
 transco-api/                         ← Backend Spring Boot
 └── src/main/java/com/transco/api/
+    ├── config/                      ← SecurityConfig, OpenApiConfig
     ├── controller/v1/               ← Endpoints REST versionnés
     ├── dto/v1/                      ← Records Java 21
-    ├── entity/                      ← Entité JPA
+    ├── entity/                      ← Entités JPA (TranscoRule, ApiKey)
     ├── mapper/v1/                   ← MapStruct
     ├── repository/                  ← Requêtes JSONB natives (opérateur @>)
+    ├── security/                    ← Filtre API Key + EntryPoint RFC 7807
     └── service/v1/ + impl/v1/      ← Logique métier
 
 transco-admin/                       ← Frontend React 18 / Vite
@@ -82,11 +86,71 @@ transco-admin/                       ← Frontend React 18 / Vite
 | Couche | Technologie | Justification |
 |---|---|---|
 | Backend | Java 21 · Spring Boot 3 | LTS, performances records, records Java |
+| Sécurité | Spring Security 6 | Filtre API Key stateless, entrypoint RFC 7807 |
 | Base de données | PostgreSQL + JSONB | Critères flexibles, index GIN natif |
 | Mapping | MapStruct | Zéro réflexion, performances compilées |
-| Documentation API | SpringDoc / Swagger UI | Contrat API auto-généré |
+| Documentation API | SpringDoc / Swagger UI | Contrat API auto-généré, bouton Authorize intégré |
 | Frontend admin | React 18 · Vite | Interface légère, hot-reload instantané |
 | Import de données | Apache POI | Import Excel `.xlsx` natif |
+
+---
+
+## 🔐 Authentification par API Key
+
+Tous les endpoints sont protégés par une **clé API** transmise dans le header `X-API-Key`.
+
+### Fonctionnement
+
+- La clé brute est hashée en **SHA-256** côté filtre avant toute comparaison
+- La base ne stocke jamais la clé en clair — uniquement le hash (CHAR 64)
+- Chaque clé est associée à un `client_name` et peut être **révoquée** (`active = false`) sans redéploiement
+- Les chemins Swagger UI (`/swagger-ui/**`, `/api-docs/**`) restent **publics**
+- Une réponse `401` suit le format **RFC 7807** (`application/problem+json`)
+
+### Modèle de données
+
+```sql
+CREATE TABLE api_key (
+    id          BIGSERIAL    PRIMARY KEY,
+    client_name VARCHAR(100) NOT NULL,
+    key_hash    CHAR(64)     NOT NULL,
+    active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX idx_api_key_hash ON api_key (key_hash);
+```
+
+### Insérer une clé en base
+
+```bash
+# Générer le hash SHA-256 de votre clé brute
+echo -n "ma-cle-secrete" | sha256sum
+# → e.g. a3f1c2d4...
+
+# Insérer en base
+INSERT INTO api_key (client_name, key_hash) VALUES ('mon-service', 'a3f1c2d4...');
+```
+
+### Utilisation
+
+```bash
+curl -H "X-API-Key: ma-cle-secrete" http://localhost:8080/api/v1/transco-rules
+```
+
+### Réponse en cas d'accès non autorisé
+
+```json
+{
+  "type": "https://transco.com/errors/unauthorized",
+  "title": "Non autorisé",
+  "status": 401,
+  "detail": "Full authentication is required to access this resource"
+}
+```
+
+### Swagger UI
+
+Le bouton **Authorize** est disponible dans Swagger UI pour renseigner la clé et tester les endpoints directement depuis l'interface.
 
 ---
 
@@ -114,6 +178,7 @@ Le choix du type `JSONB` avec l'opérateur `@>` permet des **requêtes de résol
 ## 🔌 API REST
 
 Toutes les routes sont versionnées (`/api/v1/`) pour garantir la rétrocompatibilité.
+Toutes les routes (sauf Swagger) nécessitent le header `X-API-Key`.
 
 | Méthode | Endpoint | Description |
 |---|---|---|
@@ -130,6 +195,7 @@ Toutes les routes sont versionnées (`/api/v1/`) pour garantir la rétrocompatib
 ```bash
 curl -X POST http://localhost:8080/api/v1/transco-rules/resolve \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: ma-cle-secrete" \
   -d '{
     "context": "tarif",
     "inputs": { "pays": "FR", "canal": "web" },
@@ -137,7 +203,7 @@ curl -X POST http://localhost:8080/api/v1/transco-rules/resolve \
   }'
 ```
 
-Swagger UI disponible sur `http://localhost:8080/swagger-ui.html`.
+Swagger UI disponible sur `http://localhost:8080/swagger-ui.html` (accès public).
 
 ---
 
@@ -175,13 +241,19 @@ Le endpoint `POST /api/v1/transco-rules/import` accepte un fichier `.xlsx` en mu
 ### Backend
 
 ```bash
+# Créer la base et initialiser le schéma (tables transco_rule + api_key)
 psql -U postgres -c "CREATE DATABASE transco;"
 psql -U postgres -d transco -f src/main/resources/init.sql
+
+# Insérer une première clé API (remplacer le hash par celui de votre clé)
+psql -U postgres -d transco -c \
+  "INSERT INTO api_key (client_name, key_hash) VALUES ('dev', '$(echo -n "ma-cle-secrete" | sha256sum | cut -d" " -f1)');"
+
 # Configurer src/main/resources/application.properties
 mvn spring-boot:run
 ```
 
-→ API : `http://localhost:8080`  
+→ API : `http://localhost:8080`
 → Swagger : `http://localhost:8080/swagger-ui.html`
 
 ### Frontend
@@ -204,11 +276,11 @@ cd transco-admin && npm install && npm run dev
 
 ## 🔮 Axes d'évolution possibles
 
-- 🔐 Sécurisation OAuth2 / JWT des endpoints
 - 📊 API de statistiques d'utilisation (règles les plus sollicitées)
 - 🌐 Support multi-tenant (isolation par organisation)
 - 🐳 Image Docker officielle + `docker-compose.yml`
 - 📦 Publication sur Maven Central comme librairie embarquable
+- 🔄 Rotation de clés API avec période de grâce
 
 ---
 
