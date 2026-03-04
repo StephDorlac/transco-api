@@ -6,7 +6,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3-6DB33F?style=flat-square&logo=springboot&logoColor=white)
 ![Spring Security](https://img.shields.io/badge/Spring%20Security-6-6DB33F?style=flat-square&logo=springsecurity&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?style=flat-square&logo=postgresql&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)
 ![License](https://img.shields.io/badge/Licence-MIT-blue?style=flat-square)
 
 ---
@@ -90,7 +90,7 @@ transco-admin/                       ← Frontend React 18 / Vite
 | Base de données | PostgreSQL + JSONB | Critères flexibles, index GIN natif |
 | Mapping | MapStruct | Zéro réflexion, performances compilées |
 | Documentation API | SpringDoc / Swagger UI | Contrat API auto-généré, bouton Authorize intégré |
-| Frontend admin | React 18 · Vite | Interface légère, hot-reload instantané |
+| Frontend admin | React 19 · Vite | Interface légère, hot-reload instantané, login par clé API |
 | Import de données | Apache POI | Import Excel `.xlsx` natif |
 
 ---
@@ -102,7 +102,7 @@ Tous les endpoints sont protégés par une **clé API** transmise dans le header
 ### Fonctionnement
 
 - La clé brute est hashée en **SHA-256** côté filtre avant toute comparaison
-- La base ne stocke jamais la clé en clair — uniquement le hash (CHAR 64)
+- La base ne stocke jamais la clé en clair — uniquement le hash (VARCHAR 64)
 - Chaque clé est associée à un `client_name` et peut être **révoquée** (`active = false`) sans redéploiement
 - Les chemins Swagger UI (`/swagger-ui/**`, `/api-docs/**`) restent **publics**
 - Une réponse `401` suit le format **RFC 7807** (`application/problem+json`)
@@ -113,7 +113,7 @@ Tous les endpoints sont protégés par une **clé API** transmise dans le header
 CREATE TABLE api_key (
     id          BIGSERIAL    PRIMARY KEY,
     client_name VARCHAR(100) NOT NULL,
-    key_hash    CHAR(64)     NOT NULL,
+    key_hash    VARCHAR(64)  NOT NULL,
     active      BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMP    NOT NULL DEFAULT NOW()
 );
@@ -263,6 +263,8 @@ cd transco-admin && npm install && npm run dev
 ```
 
 → Interface : `http://localhost:5173`
+
+Au premier accès, un écran de login demande la **clé API brute**. Elle est vérifiée contre l'API puis conservée en `sessionStorage` pour la durée de l'onglet.
 
 ---
 
