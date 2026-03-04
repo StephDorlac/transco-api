@@ -58,7 +58,7 @@ ALTER TABLE transco_rule ALTER COLUMN id TYPE BIGINT;
 CREATE TABLE IF NOT EXISTS api_key (
     id          BIGSERIAL    PRIMARY KEY,
     client_name VARCHAR(100) NOT NULL,
-    key_hash    CHAR(64)     NOT NULL,
+    key_hash    VARCHAR(64)  NOT NULL,
     active      BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMP    NOT NULL DEFAULT NOW()
 );

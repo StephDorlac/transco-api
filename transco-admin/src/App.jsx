@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 const API_BASE = "/api/v1";
 
@@ -43,28 +43,32 @@ const themes = {
 };
 
 // ─── API ──────────────────────────────────────────────────────────────────────
-const api = {
-  getAll: () => fetch(`${API_BASE}/transco-rules`).then(r => r.json()),
-  create: body => fetch(`${API_BASE}/transco-rules`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }).then(r => { if (!r.ok) throw r; return r.json(); }),
-  update: (id, body) => fetch(`${API_BASE}/transco-rules/${id}`, {
-    method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }).then(r => { if (!r.ok) throw r; return r.json(); }),
-  delete: id => fetch(`${API_BASE}/transco-rules/${id}`, { method: "DELETE" })
-    .then(r => { if (!r.ok) throw r; }),
-  resolve: body => fetch(`${API_BASE}/transco-rules/resolve`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }).then(r => { if (!r.ok) throw r; return r.json(); }),
-  importExcel: file => {
-    const fd = new FormData();
-    fd.append("file", file);
-    return fetch(`${API_BASE}/transco-rules/import`, { method: "POST", body: fd })
-      .then(r => { if (!r.ok) throw r; return r.json(); });
-  },
+const makeApi = (apiKey) => {
+  const h = (extra = {}) => ({ "X-API-Key": apiKey, ...extra });
+  return {
+    getAll: () => fetch(`${API_BASE}/transco-rules`, { headers: h() })
+      .then(r => { if (!r.ok) throw r; return r.json(); }),
+    create: body => fetch(`${API_BASE}/transco-rules`, {
+      method: "POST", headers: h({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    }).then(r => { if (!r.ok) throw r; return r.json(); }),
+    update: (id, body) => fetch(`${API_BASE}/transco-rules/${id}`, {
+      method: "PUT", headers: h({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    }).then(r => { if (!r.ok) throw r; return r.json(); }),
+    delete: id => fetch(`${API_BASE}/transco-rules/${id}`, { method: "DELETE", headers: h() })
+      .then(r => { if (!r.ok) throw r; }),
+    resolve: body => fetch(`${API_BASE}/transco-rules/resolve`, {
+      method: "POST", headers: h({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    }).then(r => { if (!r.ok) throw r; return r.json(); }),
+    importExcel: file => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return fetch(`${API_BASE}/transco-rules/import`, { method: "POST", headers: h(), body: fd })
+        .then(r => { if (!r.ok) throw r; return r.json(); });
+    },
+  };
 };
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -87,6 +91,8 @@ const Icon = ({ name, size = 16 }) => {
     download: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
     fileText: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
     info: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+    logOut: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+    key: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
   };
   return icons[name] || null;
 };
@@ -240,7 +246,7 @@ function RuleForm({ initial, onSubmit, onCancel, loading, t }) {
 }
 
 // ─── ImportModal ──────────────────────────────────────────────────────────────
-function ImportModal({ open, onClose, onSuccess, t }) {
+function ImportModal({ open, onClose, onSuccess, t, api }) {
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -388,7 +394,7 @@ function ImportModal({ open, onClose, onSuccess, t }) {
 }
 
 // ─── ResolvePanel ─────────────────────────────────────────────────────────────
-function ResolvePanel({ t }) {
+function ResolvePanel({ t, api }) {
   const [context, setContext] = useState("");
   const [inputs, setInputs] = useState("{}");
   const [withFallback, setWithFallback] = useState(true);
@@ -450,10 +456,104 @@ function ResolvePanel({ t }) {
   );
 }
 
+// ─── LoginScreen ──────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin, t }) {
+  const [key, setKey] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!key.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      const r = await fetch(`${API_BASE}/transco-rules`, {
+        headers: { "X-API-Key": key.trim() },
+      });
+      if (r.status === 401 || r.status === 403) {
+        setError("Clé API invalide ou inactive");
+      } else if (r.ok) {
+        sessionStorage.setItem("transco-api-key", key.trim());
+        onLogin(key.trim());
+      } else {
+        setError("Erreur de connexion à l'API");
+      }
+    } catch {
+      setError("Impossible de joindre l'API");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: t.surface, borderRadius: 20, padding: 40, width: "100%", maxWidth: 420, boxShadow: t.shadowHover, border: `1px solid ${t.border}`, animation: "modalIn 0.25s ease" }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ background: t.accent, borderRadius: 14, padding: 14, display: "inline-flex", color: "#fff", marginBottom: 16 }}>
+            <Icon name="database" size={24} />
+          </div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 22, color: t.text }}>Transco Admin</div>
+          <div style={{ color: t.textMuted, fontSize: 14, marginTop: 6 }}>Entrez votre clé API pour continuer</div>
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: t.textMuted, display: "block", marginBottom: 8 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Icon name="key" size={13} /> Clé API</span>
+            </label>
+            <input
+              type="password"
+              value={key}
+              onChange={e => { setKey(e.target.value); setError(""); }}
+              placeholder="••••••••••••••••"
+              autoFocus
+              style={{
+                width: "100%", background: t.surfaceAlt,
+                border: `1px solid ${error ? t.danger : t.border}`,
+                borderRadius: 10, padding: "12px 14px", color: t.text, fontSize: 14,
+                fontFamily: "inherit", outline: "none", boxSizing: "border-box",
+                transition: "border-color 0.15s",
+              }}
+            />
+            {error && (
+              <div style={{ marginTop: 8, fontSize: 13, color: t.danger, display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon name="alertCircle" size={13} /> {error}
+              </div>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={loading || !key.trim()}
+            style={{
+              padding: "12px 20px", borderRadius: 10, border: "none",
+              background: t.accent, color: "#fff", cursor: "pointer", fontSize: 14,
+              fontFamily: "inherit", fontWeight: 600, display: "flex", alignItems: "center",
+              justifyContent: "center", gap: 8,
+              opacity: (loading || !key.trim()) ? 0.6 : 1,
+              transition: "opacity 0.15s",
+            }}
+          >
+            {loading ? <><Icon name="refresh" size={14} /> Vérification…</> : <><Icon name="check" size={14} /> Se connecter</>}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [mode, setMode] = useState("light");
   const t = themes[mode];
+
+  const [apiKey, setApiKey] = useState(() => sessionStorage.getItem("transco-api-key") || "");
+  const api = useMemo(() => makeApi(apiKey), [apiKey]);
+
+  const logout = useCallback(() => {
+    sessionStorage.removeItem("transco-api-key");
+    setApiKey("");
+  }, []);
+
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -477,13 +577,33 @@ export default function App() {
     try {
       const data = await api.getAll();
       setRules(Array.isArray(data) ? data : []);
-    } catch {
-      addToast("Impossible de charger les règles", "error");
-      setRules([]);
+    } catch (err) {
+      if (err?.status === 401 || err?.status === 403) {
+        logout();
+      } else {
+        addToast("Impossible de charger les règles", "error");
+        setRules([]);
+      }
     } finally { setLoading(false); }
-  }, [addToast]);
+  }, [api, addToast, logout]);
 
-  useEffect(() => { fetchRules(); }, [fetchRules]);
+  useEffect(() => { if (apiKey) fetchRules(); }, [apiKey, fetchRules]);
+
+  // ─── Écran de connexion ───
+  if (!apiKey) {
+    return (
+      <>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'DM Sans', sans-serif; }
+          input:focus { border-color: ${t.accent} !important; }
+          @keyframes modalIn { from { transform: translateY(-10px) scale(0.97); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+        `}</style>
+        <LoginScreen onLogin={setApiKey} t={t} />
+      </>
+    );
+  }
 
   const contexts = ["all", ...new Set(rules.map(r => r.context))];
   const filtered = rules.filter(r =>
@@ -589,6 +709,9 @@ export default function App() {
             <button onClick={() => setMode(m => m === "light" ? "dark" : "light")} style={{ background: t.surfaceAlt, border: `1px solid ${t.border}`, borderRadius: 10, padding: 9, cursor: "pointer", color: t.textMuted, display: "flex", alignItems: "center" }}>
               <Icon name={mode === "light" ? "moon" : "sun"} size={16} />
             </button>
+            <button onClick={logout} title="Se déconnecter" style={{ background: t.dangerLight, border: `1px solid ${t.danger}30`, borderRadius: 10, padding: 9, cursor: "pointer", color: t.danger, display: "flex", alignItems: "center" }}>
+              <Icon name="logOut" size={16} />
+            </button>
           </div>
         </header>
 
@@ -693,7 +816,7 @@ export default function App() {
                 <p style={{ color: t.textMuted, marginTop: 6, fontSize: 14 }}>Testez la résolution en fournissant un contexte et des critères d'entrée.</p>
               </div>
               <div style={{ background: t.surface, borderRadius: 16, border: `1px solid ${t.border}`, padding: 28, boxShadow: t.shadow }}>
-                <ResolvePanel t={t} />
+                <ResolvePanel t={t} api={api} />
               </div>
             </div>
           )}
@@ -728,6 +851,7 @@ export default function App() {
         onClose={() => setShowImport(false)}
         onSuccess={() => { fetchRules(); addToast("Import terminé, liste mise à jour"); }}
         t={t}
+        api={api}
       />
 
       <Toast toasts={toasts} removeToast={removeToast} t={t} />
